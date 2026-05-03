@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node (the helper has no deps, but keep these for safety if anyone adds tooling)
+node_modules/
+npm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Local job state (jobs live in ~/.claude/open-review, not in this repo,
+# but ignore in case someone runs the helper from inside a clone)
+jobs/
+*.log
