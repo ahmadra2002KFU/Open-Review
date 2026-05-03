@@ -41,6 +41,16 @@ Verify with:
 node ~/.claude/skills/open-review/scripts/open-review.mjs setup
 ```
 
+### Optional: register the dispatch subagent
+
+The skill ships an `open-review-dispatch` subagent (a thin Haiku-model forwarder useful when you want a giant opencode result to stay isolated from your main Claude conversation). Skills can't auto-register subagents, so if you want it to appear in Claude Code's Agent picker, copy the file once:
+
+```bash
+mkdir -p ~/.claude/agents && cp ~/.claude/skills/open-review/agents/dispatch.md ~/.claude/agents/open-review-dispatch.md
+```
+
+After that you can launch it via the Agent tool with `subagent_type: open-review-dispatch`. Skip this step if you don't need context isolation — Claude calls the helper directly via Bash either way.
+
 You should see `ok: true`, your opencode version, and your configured providers.
 
 ## Usage

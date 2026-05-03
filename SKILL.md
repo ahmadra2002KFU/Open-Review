@@ -23,6 +23,35 @@ When prefs ARE set, `dispatch` enforces them: any model whose provider is not in
 
 When picking a model, always start from `node ... models` (which filters to allowed providers by default). **Never name a model that wasn't in that output.** Pass `--all` only if you have a specific reason to bypass the filter and you've explained it to the user.
 
+## Mandatory three-question flow before every dispatch
+
+Whenever Open-Review is triggered (skill loaded, slash command invoked, user says "use opencode" / "delegate to opencode" / etc.), **always** present three structured questions using `AskUserQuestion` before calling `dispatch`. Never skip these. Never accept free-form text as a substitute. The user clicks options — no typing required (they can still pick "Other" to type when they want).
+
+Build the questions dynamically from live data each time. Do not hardcode model names — pull them from `node ... models` (which is already filtered by prefs).
+
+**Question 1 — Goal** (single-select, label `Goal`):
+- "Review / analyze (read-only)" → maps to `--agent plan`
+- "Build / refactor / fix (writes files)" → maps to `--agent build`
+- "Quick test (one-line probe)" → `--agent plan` with a tiny prompt
+
+**Question 2 — Target directory** (single-select, label `Target`):
+- "Current working dir" — uses `process.cwd()` of the call
+- "A project under ~/projects/" — list the 3 most recently modified subdirs
+- "Other path" — let the user type an absolute path via the "Other" option
+
+**Question 3 — Model** (single-select, label `Model`):
+- Top 3 most relevant models from `models` output, filtered by task type. Preferred order:
+  - For **plan/review** tasks: a strong reviewer (e.g. `kimi-for-coding/k2p6`, `github-copilot/claude-opus-4.7`, `openai/gpt-5.5-pro`)
+  - For **build** tasks: a strong builder (e.g. `minimax/MiniMax-M2.7`, `openai/gpt-5.5`, `kimi-for-coding/k2p6`)
+  - Always include at least one **coding-plan / subscription** option to keep cost off the per-token meters
+- Each option's description must show provider + billing hint + 1-line "good for" note. Pull billing hint from `providers` output.
+
+Then:
+1. Combine the three answers into a `dispatch` invocation.
+2. After the helper returns the job id, tell the user it's running and you'll poll for completion.
+
+If the user explicitly asks Claude to "skip the questions" or "just go", honor that — but **only after** they say so.
+
 ## Decision tree — when to dispatch
 
 Dispatch to opencode when **any** of these hold:
