@@ -10,6 +10,19 @@ Open-Review treats the locally installed `opencode` CLI as a teammate on a multi
 
 The user owns opencode setup (install, providers, API keys). This skill never writes credentials and never auto-installs anything.
 
+## First-run: provider preferences
+
+Before the **first dispatch in any session**, run:
+```bash
+node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" prefs get
+```
+
+If it returns `allowed_providers: null`, the user has not configured Open-Review yet. **Stop and run the `/open-review:configure` flow** before dispatching: fetch the live providers list (the helper refreshes opencode's model cache automatically), present them to the user via `AskUserQuestion`, write the resulting allow-list. Never dispatch with prefs unset on a fresh install — the user almost certainly has a billing reason for excluding at least one configured route (token-billed vs coding plan).
+
+When prefs ARE set, `dispatch` enforces them: any model whose provider is not in `allowed_providers` is rejected before opencode is spawned, with a clear error pointing back to `/open-review:configure`.
+
+When picking a model, always start from `node ... models` (which filters to allowed providers by default). **Never name a model that wasn't in that output.** Pass `--all` only if you have a specific reason to bypass the filter and you've explained it to the user.
+
 ## Decision tree — when to dispatch
 
 Dispatch to opencode when **any** of these hold:

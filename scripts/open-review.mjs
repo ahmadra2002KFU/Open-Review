@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 // Open-Review helper: orchestrates background opencode runs as a teammate agent.
-// Subcommands: dispatch, status, result, cancel, tail, models, agents, setup
+// Subcommands: dispatch, status, result, cancel, tail, models, agents, setup,
+//              providers, prefs
 // No external deps. Node >= 18.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, openSync, closeSync, appendFileSync, createWriteStream } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, openSync, closeSync, appendFileSync, createWriteStream, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 
 const ROOT = join(homedir(), ".claude", "open-review");
 const JOBS_DIR = join(ROOT, "jobs");
+const PREFS_FILE = join(ROOT, "preferences.json");
+const AUTH_FILE = join(homedir(), ".local", "share", "opencode", "auth.json");
 const IS_WIN = process.platform === "win32";
 
 // On Windows, opencode may be installed as:
@@ -108,6 +111,38 @@ function isAlive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
+// ---------- preferences ----------
+
+function readPrefs() {
+  if (!existsSync(PREFS_FILE)) return null;
+  try { return JSON.parse(readFileSync(PREFS_FILE, "utf8")); } catch { return null; }
+}
+function writePrefs(prefs) {
+  mkdirSync(ROOT, { recursive: true });
+  writeFileSync(PREFS_FILE, JSON.stringify(prefs, null, 2));
+}
+
+function readAuth() {
+  if (!existsSync(AUTH_FILE)) return {};
+  try { return JSON.parse(readFileSync(AUTH_FILE, "utf8")); } catch { return {}; }
+}
+
+// Heuristic billing hint for a provider id, based on its auth type and
+// id pattern. Never invents — falls back to the raw type string.
+function billingHint(id, type) {
+  if (/-coding-plan$|^kimi-for-coding$|-for-coding$/.test(id)) return "Coding plan (subscription)";
+  if (type === "oauth") return "OAuth subscription";
+  if (type === "api") return "API key (per-request)";
+  return type || "unknown";
+}
+
+// Provider id of a model id — everything before the first slash.
+function modelProvider(modelId) {
+  if (!modelId) return null;
+  const i = modelId.indexOf("/");
+  return i < 0 ? modelId : modelId.slice(0, i);
+}
+
 // When the detached child finishes after our parent process exited, the
 // `child.on('exit')` handler never fires. Reconcile by reading the log and
 // inferring outcome from its contents.
@@ -157,25 +192,115 @@ function cmdSetup() {
   const a = buildSpawn(["auth", "list"]);
   const ver = spawnSync(v.cmd, v.args, { encoding: "utf8", ...v.opts, windowsHide: true });
   const auth = spawnSync(a.cmd, a.args, { encoding: "utf8", ...a.opts, windowsHide: true });
+  const prefs = readPrefs();
   console.log(JSON.stringify({
     ok: true,
     opencode_path: path.trim(),
     version: (ver.stdout || "").trim(),
     auth_list: (auth.stdout || auth.stderr || "").trim(),
     jobs_root: ROOT,
-    workspace_bucket: workspaceBucket()
+    workspace_bucket: workspaceBucket(),
+    prefs: prefs || null,
+    prefs_file: PREFS_FILE,
+    prefs_configured: !!prefs
   }, null, 2));
 }
 
-function cmdModels(args) {
+// Internal: fetch the current models list from opencode (optionally refreshed).
+function fetchModels(provider, refresh) {
   const passthrough = ["models"];
-  if (args._[0]) passthrough.push(args._[0]);
-  if (args.flags.refresh) passthrough.push("--refresh");
+  if (provider) passthrough.push(provider);
+  if (refresh) passthrough.push("--refresh");
   const s = buildSpawn(passthrough);
   const r = spawnSync(s.cmd, s.args, { encoding: "utf8", ...s.opts, windowsHide: true });
-  process.stdout.write(r.stdout || "");
-  if (r.status !== 0) process.stderr.write(r.stderr || "");
-  process.exit(r.status || 0);
+  if (r.status !== 0) return { ok: false, stderr: r.stderr || "" };
+  // opencode prints lines like "provider/model"; ignore any non-matching lines.
+  const lines = (r.stdout || "").split(/\r?\n/).map(l => l.trim()).filter(l => /^[\w-]+\//.test(l));
+  return { ok: true, models: lines };
+}
+
+function cmdModels(args) {
+  const provider = args._[0] || null;
+  const refresh = !!args.flags.refresh;
+  const showAll = !!args.flags.all;
+  const result = fetchModels(provider, refresh);
+  if (!result.ok) { process.stderr.write(result.stderr); process.exit(1); }
+  let models = result.models;
+  const prefs = readPrefs();
+  if (!showAll && prefs && Array.isArray(prefs.allowed_providers) && prefs.allowed_providers.length) {
+    const allowed = new Set(prefs.allowed_providers);
+    models = models.filter(m => allowed.has(modelProvider(m)));
+  }
+  process.stdout.write(models.join("\n") + (models.length ? "\n" : ""));
+  process.exit(0);
+}
+
+// `providers` — list all opencode-authed providers, with auth type, billing
+// hint, and a freshly-fetched sample of their current models. Output is JSON
+// so Claude can consume it cleanly. Always refreshes the model cache so the
+// model list reflects what opencode has TODAY (no stale samples).
+function cmdProviders(args) {
+  const sampleSize = parseInt(args.flags.sample, 10) || 5;
+  const auth = readAuth();
+  const ids = Object.keys(auth);
+  if (!ids.length) {
+    console.log(JSON.stringify({ providers: [], note: "no providers authed in opencode" }, null, 2));
+    process.exit(0);
+  }
+  // Refresh once, then read filtered models per provider from cache.
+  const all = fetchModels(null, true);
+  if (!all.ok) { process.stderr.write(all.stderr); process.exit(1); }
+  const providers = ids.map(id => {
+    const type = auth[id] && auth[id].type;
+    const myModels = all.models.filter(m => modelProvider(m) === id);
+    return {
+      id,
+      auth_type: type || null,
+      billing: billingHint(id, type),
+      model_count: myModels.length,
+      sample_models: myModels.slice(0, sampleSize)
+    };
+  });
+  const prefs = readPrefs();
+  console.log(JSON.stringify({
+    providers,
+    total_models: all.models.length,
+    current_prefs: prefs ? prefs.allowed_providers : null,
+    prefs_file: PREFS_FILE
+  }, null, 2));
+  process.exit(0);
+}
+
+function cmdPrefs(args) {
+  const sub = args._[0] || "get";
+  if (sub === "get") {
+    const p = readPrefs();
+    console.log(JSON.stringify(p || { allowed_providers: null, configured_at: null }, null, 2));
+    process.exit(0);
+  }
+  if (sub === "reset") {
+    if (existsSync(PREFS_FILE)) unlinkSync(PREFS_FILE);
+    console.log(JSON.stringify({ ok: true, action: "reset" }, null, 2));
+    process.exit(0);
+  }
+  if (sub === "set") {
+    const allowed = (args.flags.allowed || "").split(",").map(s => s.trim()).filter(Boolean);
+    if (!allowed.length) { console.error("prefs set: --allowed <comma,list> required"); process.exit(2); }
+    // Validate each allowed provider exists in auth.json — never accept a
+    // bogus id silently. Caller should call `providers` first to discover.
+    const auth = readAuth();
+    const unknown = allowed.filter(p => !(p in auth));
+    if (unknown.length) {
+      console.error("prefs set: providers not configured in opencode auth.json: " + unknown.join(", "));
+      process.exit(2);
+    }
+    const prefs = { allowed_providers: allowed, configured_at: new Date().toISOString() };
+    writePrefs(prefs);
+    console.log(JSON.stringify({ ok: true, prefs }, null, 2));
+    process.exit(0);
+  }
+  console.error("prefs: subcommand must be get | set | reset");
+  process.exit(2);
 }
 
 function cmdAgents() {
@@ -193,6 +318,26 @@ function cmdDispatch(args) {
 
   const agent = args.flags.agent || "build";
   const model = args.flags.model || null;
+
+  // Enforce provider preferences. If a model is given, its provider must be
+  // in the allowed list. If no model is given, opencode will use its own
+  // default — we can't validate that here without parsing opencode config,
+  // so we trust the user's opencode default.
+  const prefs = readPrefs();
+  if (model && prefs && Array.isArray(prefs.allowed_providers) && prefs.allowed_providers.length) {
+    const provider = modelProvider(model);
+    if (!prefs.allowed_providers.includes(provider)) {
+      console.error(JSON.stringify({
+        error: "provider_disabled",
+        provider,
+        model,
+        allowed_providers: prefs.allowed_providers,
+        hint: "Run /open-review:configure to change preferences, or `prefs reset` to clear them, or `prefs set --allowed " + prefs.allowed_providers.concat(provider).join(",") + "` to add this provider."
+      }, null, 2));
+      process.exit(2);
+    }
+  }
+
   const variant = args.flags.variant || null;
   const session = args.flags.session || null;
   const cont = args.flags.continue || false;
@@ -279,6 +424,10 @@ function cmdDispatch(args) {
         j.summary = tail.slice(-1)[0] || tail[0] || "";
       } catch {}
       writeJob(j);
+      // Explicit exit: the data listeners on child.stdout/stderr can keep
+      // the event loop alive on Windows even after the streams end, leaving
+      // a zombie helper process. Force termination once we've finalized.
+      process.exit(code === 0 ? 0 : 1);
     });
   });
 }
@@ -346,12 +495,14 @@ switch (sub) {
   case "setup": cmdSetup(); break;
   case "models": cmdModels(rest); break;
   case "agents": cmdAgents(); break;
+  case "providers": cmdProviders(rest); break;
+  case "prefs": cmdPrefs(rest); break;
   case "dispatch": cmdDispatch(rest); break;
   case "status": cmdStatus(rest); break;
   case "result": cmdResult(rest); break;
   case "cancel": cmdCancel(rest); break;
   case "tail": cmdTail(rest); break;
   default:
-    console.error("usage: open-review.mjs <setup|dispatch|status|result|cancel|tail|models|agents> [...]");
+    console.error("usage: open-review.mjs <setup|providers|prefs|dispatch|status|result|cancel|tail|models|agents> [...]");
     process.exit(2);
 }
