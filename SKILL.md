@@ -25,6 +25,8 @@ When picking a model, always start from `node ... models` (which filters to allo
 
 ## Mandatory three-question flow before every dispatch
 
+> **Bypass note** — When the work is dispatched via the Task tool with `subagent_type: "open-review-plan"` or `"open-review-build"`, those subagents handle dispatch directly and **skip this question flow** (they run synchronously with `--wait`, infer model from the user's prompt or fall back to opencode's default, and refuse jobs that look likely to exceed the 9-minute Bash cap). The flow below remains mandatory for the `/open-review:dispatch` slash command and for any direct background dispatch Claude Code initiates from this skill.
+
 Whenever Open-Review is triggered (skill loaded, slash command invoked, user says "use opencode" / "delegate to opencode" / etc.), **always** present three structured questions using `AskUserQuestion` before calling `dispatch`. Never skip these. Never accept free-form text as a substitute. The user clicks options — no typing required (they can still pick "Other" to type when they want).
 
 Build the questions dynamically from live data each time. Do not hardcode model names — pull them from `node ... models` (which is already filtered by prefs).
