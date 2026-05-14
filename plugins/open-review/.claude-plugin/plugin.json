@@ -1,0 +1,7 @@
+{
+  "name": "open-review",
+  "version": "2.0.0",
+  "description": "Dispatch general-purpose work to a locally installed opencode CLI as a teammate agent — code review, repo-wide analysis, planning passes, refactors.",
+  "author": { "name": "ahmadra2002KFU" },
+  "license": "MIT"
+}

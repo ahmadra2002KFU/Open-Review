@@ -5,7 +5,7 @@ argument-hint: [job-id]
 ---
 
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" result $ARGUMENTS
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" result $ARGUMENTS
 ```
 
 Surface the relevant findings to the user. If the output is large (>100 lines), summarize and offer to expand or open the log file. Always cite the job id, agent, and model.

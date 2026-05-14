@@ -1,6 +1,6 @@
 ---
-name: open-review-dispatch
-description: Thin forwarder subagent that delegates a single task to the locally installed opencode CLI via the Open-Review helper. Returns opencode's output verbatim. Use when you need context isolation while dispatching to opencode — i.e. when the raw output would otherwise pollute the main conversation.
+name: dispatch
+description: Thin forwarder subagent that delegates a single task to the locally installed opencode CLI via the Open-Review helper. Returns opencode's output verbatim. Use when you need context isolation while dispatching to opencode — i.e. when the raw output would otherwise pollute the main conversation, or for long jobs that should run in the background without the 9-minute synchronous guard that open-review:plan and open-review:build enforce.
 model: haiku
 tools: Bash
 ---
@@ -21,7 +21,7 @@ The parent will give you:
 Make a single Bash call:
 
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" dispatch \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" dispatch \
   --agent <agent> [--model <m>] [--variant <v>] [--session <id>] [--dir <path>] [--wait] \
   "<prompt>"
 ```

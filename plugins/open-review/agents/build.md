@@ -1,24 +1,24 @@
 ---
-name: open-review-build
+name: build
 description: |
-  Delegates file-editing opencode CLI work — refactors, codemods, scaffolding, applying fixes, implementing features — to save Claude tokens. Use proactively when the user says "have opencode refactor", "use opencode to rewrite", "scaffold tests with opencode", "apply these fixes via opencode", or any opencode mention combined with an instruction that requires writing files. Do NOT use for read-only review/audit (route to open-review-plan) or for jobs likely to exceed 9 minutes (route the user to /open-review:dispatch instead).
+  Delegates file-editing opencode CLI work — refactors, codemods, scaffolding, applying fixes, implementing features — to save Claude tokens. Use proactively when the user says "have opencode refactor", "use opencode to rewrite", "scaffold tests with opencode", "apply these fixes via opencode", or any opencode mention combined with an instruction that requires writing files. Do NOT use for read-only review/audit (route to open-review:plan) or for jobs likely to exceed 9 minutes (route the user to /open-review:dispatch instead).
   <example>
   Context: explicit opencode mention, edits requested.
   user: "Have opencode refactor the auth module to use async/await"
-  assistant: "Routing to open-review-build."
+  assistant: "Routing to open-review:build."
   <commentary>Explicit "opencode" + refactor (writes files) = exact match.</commentary>
   </example>
   <example>
   Context: scaffold/codemod request.
   user: "Use opencode to scaffold Jest tests for the utils folder"
-  assistant: "Scaffolding work — delegating to open-review-build."
+  assistant: "Scaffolding work — delegating to open-review:build."
   <commentary>Test scaffolding writes files; build agent.</commentary>
   </example>
   <example>
   Context: NEGATIVE — read-only review.
   user: "Have opencode review my auth changes"
-  assistant: "Routing to open-review-plan (read-only)."
-  <commentary>open-review-build edits files; review is read-only — wrong agent.</commentary>
+  assistant: "Routing to open-review:plan (read-only)."
+  <commentary>open-review:build edits files; review is read-only — wrong agent.</commentary>
   </example>
 model: haiku
 tools: Bash
@@ -37,7 +37,7 @@ The parent passes a single user request describing the change to make. The reque
 Run:
 
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" prefs get
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" prefs get
 ```
 
 If the response contains `"allowed_providers": null`, **stop**. Return exactly:
@@ -66,7 +66,7 @@ Do not ask the user follow-up questions. This agent runs one-shot.
 Run exactly one Bash command:
 
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" dispatch \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" dispatch \
   --agent build --dir "<cwd-or-user-path>" --wait \
   [--model <m>] \
   "<user request verbatim>"
@@ -80,7 +80,7 @@ If the helper exits non-zero, return its stderr verbatim — no commentary, no r
 
 Format the response as four parts:
 
-1. **One-line header**: `Ran open-review-build on <model> in <dir>` — pull from the helper's output header.
+1. **One-line header**: `Ran open-review:build on <model> in <dir>` — pull from the helper's output header.
 2. **Edits warning**: `opencode wrote files in <dir> — review the diff with \`git diff\` before committing.`
 3. **Verbatim opencode stdout** in a fenced block. If the output exceeds 200 lines, truncate to the last 200 lines and append a line: `[truncated — full log: <log path from helper manifest>]`.
 4. **3-5 bullet TLDR** of what was changed. Name files and the nature of each change. No filler.

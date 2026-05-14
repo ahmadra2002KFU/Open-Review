@@ -14,7 +14,7 @@ The user owns opencode setup (install, providers, API keys). This skill never wr
 
 Before the **first dispatch in any session**, run:
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" prefs get
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" prefs get
 ```
 
 If it returns `allowed_providers: null`, the user has not configured Open-Review yet. **Stop and run the `/open-review:configure` flow** before dispatching: fetch the live providers list (the helper refreshes opencode's model cache automatically), present them to the user via `AskUserQuestion`, write the resulting allow-list. Never dispatch with prefs unset on a fresh install — the user almost certainly has a billing reason for excluding at least one configured route (token-billed vs coding plan).
@@ -25,7 +25,7 @@ When picking a model, always start from `node ... models` (which filters to allo
 
 ## Mandatory three-question flow before every dispatch
 
-> **Bypass note** — When the work is dispatched via the Task tool with `subagent_type: "open-review-plan"` or `"open-review-build"`, those subagents handle dispatch directly and **skip this question flow** (they run synchronously with `--wait`, infer model from the user's prompt or fall back to opencode's default, and refuse jobs that look likely to exceed the 9-minute Bash cap). The flow below remains mandatory for the `/open-review:dispatch` slash command and for any direct background dispatch Claude Code initiates from this skill.
+> **Bypass note** — When the work is dispatched via the Task tool with `subagent_type: "open-review:plan"` or `"open-review:build"`, those subagents handle dispatch directly and **skip this question flow** (they run synchronously with `--wait`, infer model from the user's prompt or fall back to opencode's default, and refuse jobs that look likely to exceed the 9-minute Bash cap). The flow below remains mandatory for the `/open-review:dispatch` slash command and for any direct background dispatch Claude Code initiates from this skill.
 
 Whenever Open-Review is triggered (skill loaded, slash command invoked, user says "use opencode" / "delegate to opencode" / etc.), **always** present three structured questions using `AskUserQuestion` before calling `dispatch`. Never skip these. Never accept free-form text as a substitute. The user clicks options — no typing required (they can still pick "Other" to type when they want).
 
@@ -85,16 +85,13 @@ Default to `plan` for any "look at / review / analyze" request. Use `build` only
 
 ## Invoking the helper
 
-The helper script lives at `<skill-root>/scripts/open-review.mjs`. Always invoke via Node and the absolute path:
+The helper script ships inside this plugin. Always invoke it via Node, using the `${CLAUDE_PLUGIN_ROOT}` token so the path resolves wherever the plugin is installed:
 
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" <subcommand> [flags] [prompt]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" <subcommand> [flags] [prompt]
 ```
 
-On Windows in PowerShell:
-```powershell
-node "$env:USERPROFILE\.claude\skills\open-review\scripts\open-review.mjs" <subcommand> ...
-```
+Claude Code substitutes `${CLAUDE_PLUGIN_ROOT}` before the shell runs, so the same form works from both the Bash tool and the PowerShell tool — do not rewrite it to `$env:CLAUDE_PLUGIN_ROOT`. Keep the path double-quoted.
 
 ### Subcommands
 

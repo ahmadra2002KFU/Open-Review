@@ -10,13 +10,13 @@ Dispatch a task to opencode. **Always run the mandatory three-question flow firs
 
 1. **Check prefs** silently:
    ```bash
-   node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" prefs get
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" prefs get
    ```
    If `allowed_providers` is `null`, stop and tell the user to run `/open-review:configure` first. Do not proceed.
 
 2. **Fetch the live filtered model list** so Model question options are current:
    ```bash
-   node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" models
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" models
    ```
 
 3. **Ask the user three questions via `AskUserQuestion`**:
@@ -26,7 +26,7 @@ Dispatch a task to opencode. **Always run the mandatory three-question flow firs
 
 4. **Dispatch with `run_in_background: true`**:
    ```bash
-   node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" dispatch \
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" dispatch \
      --agent <plan|build> \
      --model <selected> \
      --dir <selected> \

@@ -7,7 +7,7 @@ argument-hint:
 Run the Open-Review setup check.
 
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" setup
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" setup
 ```
 
 If `ok: false`, tell the user what's missing (opencode binary, providers) and link them to https://opencode.ai/docs/. Do not attempt to install anything.

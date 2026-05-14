@@ -1,24 +1,24 @@
 ---
-name: open-review-plan
+name: plan
 description: |
-  Delegates read-only opencode CLI work — code review, repo audits, exploration of unfamiliar code, long-context analysis — to save Claude tokens. Use proactively when the user says "use opencode", "have opencode look at", "delegate to opencode", asks for a code review/audit/exploration, OR when the task requires reading >10 files but produces no edits. Do NOT use for file edits (route to open-review-build) or for jobs likely to exceed 9 minutes (route the user to /open-review:dispatch instead).
+  Delegates read-only opencode CLI work — code review, repo audits, exploration of unfamiliar code, long-context analysis — to save Claude tokens. Use proactively when the user says "use opencode", "have opencode look at", "delegate to opencode", asks for a code review/audit/exploration, OR when the task requires reading >10 files but produces no edits. Do NOT use for file edits (route to open-review:build) or for jobs likely to exceed 9 minutes (route the user to /open-review:dispatch instead).
   <example>
   Context: explicit opencode mention, read-only.
   user: "Have opencode review the auth changes on this branch"
-  assistant: "Routing to open-review-plan."
+  assistant: "Routing to open-review:plan."
   <commentary>Explicit "opencode" + review = exact match.</commentary>
   </example>
   <example>
   Context: long-context exploration, no opencode mention.
   user: "Find every place we touch session tokens across the monorepo"
-  assistant: "Repo-wide read — delegating to open-review-plan to save tokens."
+  assistant: "Repo-wide read — delegating to open-review:plan to save tokens."
   <commentary>>10 files, read-only → ideal opencode plan job.</commentary>
   </example>
   <example>
   Context: NEGATIVE — user wants edits.
   user: "Refactor this module to use async/await"
-  assistant: "Routing to open-review-build (writes files)."
-  <commentary>open-review-plan is read-only; this is a build job.</commentary>
+  assistant: "Routing to open-review:build (writes files)."
+  <commentary>open-review:plan is read-only; this is a build job.</commentary>
   </example>
 model: haiku
 tools: Bash
@@ -37,7 +37,7 @@ The parent passes a single user request describing the read-only task. The reque
 Run:
 
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" prefs get
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" prefs get
 ```
 
 If the response contains `"allowed_providers": null`, **stop**. Return exactly:
@@ -66,7 +66,7 @@ Do not ask the user follow-up questions. This agent runs one-shot.
 Run exactly one Bash command:
 
 ```bash
-node "$HOME/.claude/skills/open-review/scripts/open-review.mjs" dispatch \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/open-review.mjs" dispatch \
   --agent plan --dir "<cwd-or-user-path>" --wait \
   [--model <m>] \
   "<user request verbatim>"
@@ -80,7 +80,7 @@ If the helper exits non-zero, return its stderr verbatim — no commentary, no r
 
 Format the response as three parts:
 
-1. **One-line header**: `Ran open-review-plan on <model> in <dir>` — pull the model and dir from the helper's output header (the helper prints `model=...`).
+1. **One-line header**: `Ran open-review:plan on <model> in <dir>` — pull the model and dir from the helper's output header (the helper prints `model=...`).
 2. **Verbatim opencode stdout** in a fenced block. If the output exceeds 200 lines, truncate to the last 200 lines and append a line: `[truncated — full log: <log path from helper manifest>]`.
 3. **3-5 bullet TLDR** of the findings. Be specific, name files and symbols, no filler.
 
